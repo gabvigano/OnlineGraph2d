@@ -21,7 +21,7 @@ if host_type == 'server':
         server = Server(server_ip=server_ip, port=port)
 
 elif host_type == 'client':
-    server_ip = '192.168.3.141'  # input('\nenter the server ip: ')
+    server_ip = input('\nenter the server ip: ')
 
     client = Client(server_ip=server_ip, port=port)
 
