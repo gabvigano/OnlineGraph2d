@@ -1,9 +1,8 @@
 from OnlineGraph2d.Network import Server, Client, get_ip
 from OnlineGraph2d.Graphics import generate_shape
-from OnlineGraph2d.Physics import GameObject, Camera
+from OnlineGraph2d.Physics import GameObject, Camera, Follower
 
 import pygame
-import math
 
 host_type = input('who are you? [server/client]: ').lower()
 port = 5555
@@ -55,23 +54,24 @@ colors_rgb = [
 grappling_gun_target = None
 
 game_map = [
-    GameObject(pos=(0, screen_size[1] - 100), angle=0, size=(screen_size[0] - 500, 100), shape='rect', color=(255, 255, 255), static=True),
-    GameObject(pos=(200, screen_size[1] - 150), angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), static=True),
-    GameObject(pos=(250, screen_size[1] - 250), angle=0, size=(50, 150), shape='rect', color=(255, 255, 255), static=True),
-    GameObject(pos=(300, screen_size[1] - 350), angle=0, size=(50, 250), shape='rect', color=(255, 255, 255), static=True),
-    GameObject(pos=(600, screen_size[1] - 600), angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), static=True),
-    GameObject(pos=(900, screen_size[1] - 600), angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), static=True)
+    GameObject(pos=(0, screen_size[1] - 100), angle=0, size=(screen_size[0] - 500, 100), shape='rect', color=(255, 255, 255), layer=0, static=True),
+    GameObject(pos=(200, screen_size[1] - 150), angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0, static=True),
+    GameObject(pos=(250, screen_size[1] - 250), angle=0, size=(50, 150), shape='rect', color=(255, 255, 255), layer=0, static=True),
+    GameObject(pos=(300, screen_size[1] - 350), angle=0, size=(50, 250), shape='rect', color=(255, 255, 255), layer=0, static=True),
+    GameObject(pos=(600, screen_size[1] - 600), angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0, static=True),
+    GameObject(pos=(900, screen_size[1] - 600), angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0, static=True)
 ]
 game_map_collision = [(map_obj.pos, map_obj.size) for map_obj in game_map]
 
-player = GameObject(pos=[100, 100], angle=0, size=(30, 30), shape='circle', color=colors_rgb[host.client_number], static=False, gravity=0.1, friction=0.2, air_friction=0.05, collision=game_map_collision)
+player = GameObject(pos=[100, 100], angle=0, size=(30, 30), shape='circle', color=colors_rgb[host.client_number], layer=2, static=False, gravity=0.1, friction=0.2, air_friction=0.05, collision=game_map_collision)
 camera = Camera(obj=player, screen_size=screen_size)
+gun = Follower(obj=player, pos=[25, 6], angle=0, size=(15, 6), shape='rect', color=(100, 100, 100), layer=1)
 
 if host_type == 'server':
-    local_objects = [player]
+    local_objects = [player, gun]
     objects = {host.client_number: local_objects}
 else:
-    local_objects = [player]
+    local_objects = [player, gun]
 
 while not close:
     # clear display and show fps
@@ -131,25 +131,28 @@ while not close:
     player.collision = game_map_collision + [(obj.pos, obj.size) for host_number, host_objs in objects.items() for obj in host_objs if host_number != host.client_number]
 
     # compute positions
-    player.update()
+    for game_obj in local_objects:
+        game_obj.update()
     camera.update()
-    player.render_force(display=display, camera=camera, double=False)
+    # player.render_force(display=display, camera=camera, double=False)
 
     # display objects
-    for map_obj in game_map:
-        display.blit(generate_shape(map_obj), (map_obj.pos[0] - camera.pos[0], map_obj.pos[1] - camera.pos[1]))
-
+    render_objs = []
+    render_objs.extend(game_map)
     if host_type == 'client':
-        for game_obj in local_objects:
-            if game_obj.rope:
-                game_obj.rope.blit(display=display, camera=camera)
-            display.blit(generate_shape(game_obj), (game_obj.pos[0] - camera.pos[0], game_obj.pos[1] - camera.pos[1]))
-
+        render_objs.extend(local_objects)
     for host_objs in objects.values():
-        for game_obj in host_objs:
-            if game_obj.rope:
-                game_obj.rope.blit(display=display, camera=camera)
-            display.blit(generate_shape(game_obj), (game_obj.pos[0] - camera.pos[0], game_obj.pos[1] - camera.pos[1]))
+        render_objs.extend(host_objs)
+
+    render_objs.sort(key=lambda obj: obj.layer)  # sort objects by layer
+
+    for obj in render_objs:
+        try:
+            if obj.rope:
+                obj.rope.blit(display=display, camera=camera)
+        except AttributeError:
+            pass
+        display.blit(generate_shape(obj), (obj.pos[0] - camera.pos[0], obj.pos[1] - camera.pos[1]))
 
     # render
     pygame.display.update()

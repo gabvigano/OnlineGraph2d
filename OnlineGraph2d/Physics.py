@@ -4,9 +4,9 @@ import pygame
 
 
 class GameObject:
-    def __init__(self, pos, angle, size, shape, color, static, gravity=None, friction=None, air_friction=None, collision=None):
+    def __init__(self, pos, angle, size, shape, color, layer, static, gravity=None, friction=None, air_friction=None, collision=None):
         self.pos, self.angle = pos, angle
-        self.size, self.shape, self.color = size, shape, color
+        self.size, self.shape, self.color, self.layer = size, shape, color, layer
         self.static = static
         self.rope = None
 
@@ -175,3 +175,15 @@ class Rope:
 
     def blit(self, display, camera):
         pygame.draw.line(display, self.color, (self.obj.pos[0] + (self.obj.size[0] / 2) - camera.pos[0], self.obj.pos[1] + (self.obj.size[1] / 2) - camera.pos[1]), (self.pivot[0] - camera.pos[0], self.pivot[1] - camera.pos[1]), width=3)
+
+
+class Follower:
+    def __init__(self, obj, pos, angle, size, shape, color, layer):
+        self.obj = obj
+        self.pos, self.rel_pos, self.angle = [0, 0], pos, angle  # absolute and relative positions, angle
+        self.size, self.shape, self.color, self.layer = size, shape, color, layer
+
+        self.update()
+
+    def update(self):
+        self.pos = [self.obj.pos[0] + self.rel_pos[0], self.obj.pos[1] + self.rel_pos[1]]
