@@ -143,7 +143,7 @@ class GameObject:
             self.rope = Rope(obj=self, pivot=mouse_pos, color=self.color)
 
     def render_force(self, display, camera, double=False):
-        central_pos = (self.pos[0] + (self.size[0] / 2) - camera.pos[0], self.pos[1] + (self.size[1] / 2) - camera.pos[1])
+        central_pos = (self.pos[0] + self.size[0] / 2 - camera.pos[0], self.pos[1] + self.size[1] / 2 - camera.pos[1])
         if double:
             pygame.draw.line(display, (255, 0, 0), central_pos, (central_pos[0] + (self.perm_force[0] + self.temp_force[0]) * 10, central_pos[1]), width=3)
             pygame.draw.line(display, (255, 0, 0), central_pos, (central_pos[0], central_pos[1] + (self.perm_force[1] + self.temp_force[1]) * 10), width=3)
@@ -158,8 +158,8 @@ class Camera:
         self.update()
 
     def update(self):
-        self.pos[0] = self.obj.pos[0] - (self.screen_size[0] / 2)
-        self.pos[1] = self.obj.pos[1] - (self.screen_size[1] / 2)
+        self.pos[0] = self.obj.pos[0] - self.screen_size[0] / 2
+        self.pos[1] = self.obj.pos[1] - self.screen_size[1] / 2
 
 
 class Rope:
@@ -170,17 +170,17 @@ class Rope:
         self.update()
 
     def update(self):
-        self.length = math.sqrt((self.obj.pos[0] + (self.obj.size[0] / 2) - self.pivot[0]) ** 2 + (self.obj.pos[1] + (self.obj.size[1] / 2) - self.pivot[1]) ** 2)
-        self.angle = math.atan2(self.pivot[1] - (self.obj.pos[1] + self.obj.size[1] / 2), self.pivot[0] - (self.obj.pos[0] + self.obj.size[0] / 2))
+        self.length = math.sqrt((self.obj.pos[0] + self.obj.size[0] / 2 - self.pivot[0]) ** 2 + (self.obj.pos[1] + self.obj.size[1] / 2 - self.pivot[1]) ** 2)
+        self.angle = math.atan2(self.pivot[1] - self.obj.pos[1] + self.obj.size[1] / 2, self.pivot[0] - self.obj.pos[0] + self.obj.size[0] / 2)
 
     def blit(self, display, camera):
-        pygame.draw.line(display, self.color, (self.obj.pos[0] + (self.obj.size[0] / 2) - camera.pos[0], self.obj.pos[1] + (self.obj.size[1] / 2) - camera.pos[1]), (self.pivot[0] - camera.pos[0], self.pivot[1] - camera.pos[1]), width=3)
+        pygame.draw.line(display, self.color, (self.obj.pos[0] + self.obj.size[0] / 2 - camera.pos[0], self.obj.pos[1] + self.obj.size[1] / 2 - camera.pos[1]), (self.pivot[0] - camera.pos[0], self.pivot[1] - camera.pos[1]), width=3)
 
 
 class Follower:
-    def __init__(self, obj, pos, angle, size, shape, color, layer):
+    def __init__(self, obj, rel_pos, angle, size, shape, color, layer):
         self.obj = obj
-        self.pos, self.rel_pos, self.angle = [0, 0], pos, angle  # absolute and relative positions, angle
+        self.pos, self.rel_pos, self.angle = [0, 0], rel_pos, angle  # absolute and relative positions, angle
         self.size, self.shape, self.color, self.layer = size, shape, color, layer
 
         self.update()

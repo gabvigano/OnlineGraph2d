@@ -3,6 +3,7 @@ from OnlineGraph2d.Graphics import generate_shape
 from OnlineGraph2d.Physics import GameObject, Camera, Follower
 
 import pygame
+import math
 
 host_type = input('who are you? [server/client]: ').lower()
 port = 5555
@@ -52,6 +53,7 @@ colors_rgb = [
     (255, 255, 255)  # white
 ]
 grappling_gun_target = None
+mouse_pos = None
 
 game_map = [
     GameObject(pos=(0, screen_size[1] - 100), angle=0, size=(screen_size[0] - 500, 100), shape='rect', color=(255, 255, 255), layer=0, static=True),
@@ -65,7 +67,7 @@ game_map_collision = [(map_obj.pos, map_obj.size) for map_obj in game_map]
 
 player = GameObject(pos=[100, 100], angle=0, size=(30, 30), shape='circle', color=colors_rgb[host.client_number], layer=2, static=False, gravity=0.1, friction=0.2, air_friction=0.05, collision=game_map_collision)
 camera = Camera(obj=player, screen_size=screen_size)
-gun = Follower(obj=player, pos=[25, 6], angle=0, size=(15, 6), shape='rect', color=(100, 100, 100), layer=1)
+gun = Follower(obj=player, rel_pos=[player.size[0] - 7, player.size[1] / 2 - 3], angle=0, size=(15, 6), shape='rect', color=(100, 100, 100), layer=5)
 
 if host_type == 'server':
     local_objects = [player, gun]
@@ -84,9 +86,13 @@ while not close:
             close = True
 
         # check if the mouse button is pressed for the grappling gun
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_camera_pos = (mouse_pos[0] + camera.pos[0], mouse_pos[1] + camera.pos[1])
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            mouse_pos = pygame.mouse.get_pos()
-            grappling_gun_target = (mouse_pos[0] + camera.pos[0], mouse_pos[1] + camera.pos[1])
+            grappling_gun_target = mouse_camera_pos
+
+    # update mouse position based on the camera movement
+    mouse_camera_pos = (mouse_pos[0] + camera.pos[0], mouse_pos[1] + camera.pos[1])
 
     # grappling gun
     if grappling_gun_target is not None:
@@ -98,7 +104,7 @@ while not close:
             if not pygame.mouse.get_pressed()[0]:
                 # release grappling gun
                 if player.rope:
-                    #player.force(force=15, angle=math.degrees(player.rope.angle))
+                    player.force(force=15, angle=math.degrees(player.rope.angle))
                     grappling_gun_target = None
                     player.rope = None
             else:
@@ -117,6 +123,10 @@ while not close:
         player.axis_force(force=1, axis=0, limit=5) if run else player.axis_force(force=1, axis=0, limit=3)
     if keys[pygame.K_a]:
         player.axis_force(force=-1, axis=0, limit=-5) if run else player.axis_force(force=-1, axis=0, limit=-3)
+    if keys[pygame.K_r]:
+        player.pos = [100, 100]
+        player.perm_force = [0, 0]
+        player.temp_force = [0, 0]
 
     # transfer data
     if host_type == 'server':
@@ -134,7 +144,11 @@ while not close:
     for game_obj in local_objects:
         game_obj.update()
     camera.update()
-    # player.render_force(display=display, camera=camera, double=False)
+    if not player.rope:
+        gun.angle = math.atan2(mouse_camera_pos[1] - gun.pos[1] + gun.size[1] / 2, mouse_camera_pos[0] - gun.pos[0] + gun.size[0] / 2)  # noqa
+    else:
+        gun.angle = math.atan2(grappling_gun_target[1] - gun.pos[1] + gun.size[1] / 2, grappling_gun_target[0] - gun.pos[0] + gun.size[0] / 2)  # noqa
+    # player.render_force(display=display, camera=camera, double=True)
 
     # display objects
     render_objs = []
@@ -152,7 +166,21 @@ while not close:
                 obj.rope.blit(display=display, camera=camera)
         except AttributeError:
             pass
-        display.blit(generate_shape(obj), (obj.pos[0] - camera.pos[0], obj.pos[1] - camera.pos[1]))
+        display.blit(*generate_shape(obj=obj, camera=camera))
+
+    # display variables
+    variables = {
+        't_force': player.temp_force,
+        'p_force': player.perm_force
+    }
+    y = 25
+    for name, value in variables.items():
+        try:
+            display.blit(text_font.render(f'{name}: {value}', 1, (255, 255, 255)), (25, y))
+        except Exception as e:  # noqa
+            display.blit(text_font.render(f'{name}: None', 1, (255, 255, 255)), (25, y))
+            print(e)
+        y += 25
 
     # render
     pygame.display.update()
