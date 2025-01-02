@@ -2,6 +2,8 @@ import math
 
 import pygame
 
+from OnlineGraph2d.Physics import Follower
+
 
 def generate_shape(obj, camera):
     image = pygame.Surface(obj.size, pygame.SRCALPHA)
@@ -14,12 +16,16 @@ def generate_shape(obj, camera):
     if obj.angle != 0 and obj.shape != 'circle':
         image = pygame.transform.rotate(image, -math.degrees(obj.angle))
         rect = image.get_rect()
-
-        obj_obj_vect = pygame.math.Vector2(obj.obj.pos[0] + obj.obj.size[0] / 2, obj.obj.pos[1] + obj.obj.size[1] / 2)
-        obj_vect = pygame.math.Vector2(obj.pos[0] + obj.size[0] / 2, obj.pos[1] + obj.size[1] / 2)
-        new_pos = (obj_vect - obj_obj_vect).rotate(math.degrees(obj.angle)) + obj_obj_vect
-        rect.center = new_pos  # noqa
-        pos = rect.topleft
+        
+        if isinstance(obj, Follower):  # if it is a Follower instance it rotates around the main object's center
+            main_vect = pygame.math.Vector2(obj.obj.pos[0] + obj.obj.size[0] / 2, obj.obj.pos[1] + obj.obj.size[1] / 2)
+            obj_vect = pygame.math.Vector2(obj.pos[0] + obj.size[0] / 2, obj.pos[1] + obj.size[1] / 2)
+            new_pos = (obj_vect - main_vect).rotate(math.degrees(obj.angle)) + main_vect
+            rect.center = new_pos  # noqa
+            pos = rect.topleft
+        else:  # otherwise it rotates around its center
+            rect.center = (obj.pos[0] + obj.size[0] / 2, obj.pos[1] + obj.size[1] / 2)
+            pos = rect.topleft
     else:
         pos = obj.pos
 

@@ -1,9 +1,10 @@
-from OnlineGraph2d.Network import Server, Client, get_ip
-from OnlineGraph2d.Graphics import generate_shape
-from OnlineGraph2d.Physics import GameObject, Camera, Follower
+import math
 
 import pygame
-import math
+
+from OnlineGraph2d.Graphics import generate_shape
+from OnlineGraph2d.Network import Server, Client, get_ip
+from OnlineGraph2d.Physics import GameObject, Camera, Rope, Follower, grappling_gun_check
 
 host_type = input('who are you? [server/client]: ').lower()
 port = 5555
@@ -53,19 +54,17 @@ colors_rgb = [
     (255, 255, 255)  # white
 ]
 grappling_gun_target = None
+grappling_gun_swing = False
 mouse_pos = None
 
 game_map = [
-    GameObject(pos=(0, screen_size[1] - 100), angle=0, size=(screen_size[0] - 500, 100), shape='rect', color=(255, 255, 255), layer=0, static=True),
-    GameObject(pos=(200, screen_size[1] - 150), angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0, static=True),
-    GameObject(pos=(250, screen_size[1] - 250), angle=0, size=(50, 150), shape='rect', color=(255, 255, 255), layer=0, static=True),
-    GameObject(pos=(300, screen_size[1] - 350), angle=0, size=(50, 250), shape='rect', color=(255, 255, 255), layer=0, static=True),
+    GameObject(pos=(0, screen_size[1] - 100), angle=0, size=(screen_size[0], 50), shape='rect', color=(255, 255, 255), layer=0, static=True),
     GameObject(pos=(600, screen_size[1] - 600), angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0, static=True),
-    GameObject(pos=(900, screen_size[1] - 600), angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0, static=True)
+    GameObject(pos=(100, screen_size[1] - 300), angle=0, size=(200, 200), shape='rect', color=(255, 255, 255), layer=0, static=True)
 ]
 game_map_collision = [(map_obj.pos, map_obj.size) for map_obj in game_map]
 
-player = GameObject(pos=[100, 100], angle=0, size=(30, 30), shape='circle', color=colors_rgb[host.client_number], layer=2, static=False, gravity=0.1, friction=0.2, air_friction=0.05, collision=game_map_collision)
+player = GameObject(pos=[100, 100], angle=0, size=(30, 30), shape='circle', color=colors_rgb[host.client_number], layer=2, static=False, mass=1, collision=game_map_collision)
 camera = Camera(obj=player, screen_size=screen_size)
 gun = Follower(obj=player, rel_pos=[player.size[0] - 7, player.size[1] / 2 - 3], angle=0, size=(15, 6), shape='rect', color=(100, 100, 100), layer=5)
 
@@ -88,27 +87,32 @@ while not close:
         # check if the mouse button is pressed for the grappling gun
         mouse_pos = pygame.mouse.get_pos()
         mouse_camera_pos = (mouse_pos[0] + camera.pos[0], mouse_pos[1] + camera.pos[1])
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            grappling_gun_target = mouse_camera_pos
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                grappling_gun_target = mouse_camera_pos
+                grappling_gun_swing = True
+            elif event.button == 3:
+                grappling_gun_target = mouse_camera_pos
+                grappling_gun_swing = False
 
     # update mouse position based on the camera movement
     mouse_camera_pos = (mouse_pos[0] + camera.pos[0], mouse_pos[1] + camera.pos[1])
 
     # grappling gun
     if grappling_gun_target is not None:
-        grappling_gun_target_ok = player.grappling_gun_check(mouse_pos=grappling_gun_target)
-        if not grappling_gun_target_ok:
+        if not grappling_gun_check(mouse_pos=grappling_gun_target, collision=player.collision):
             grappling_gun_target = None
             player.rope = None
         else:
-            if not pygame.mouse.get_pressed()[0]:
+            if player.rope and ((not pygame.mouse.get_pressed()[0] and player.rope.swing) or (not pygame.mouse.get_pressed()[2] and not player.rope.swing)):
                 # release grappling gun
-                if player.rope:
-                    player.force(force=15, angle=math.degrees(player.rope.angle))
-                    grappling_gun_target = None
-                    player.rope = None
+                if not player.rope.swing:
+                    player.apply_vel(vel=20, angle=-player.rope.angle - math.pi / 2)
+                grappling_gun_target = None
+                player.rope = None
             else:
-                player.grappling_gun(mouse_pos=grappling_gun_target)
+                if not player.rope:
+                    player.rope = Rope(obj=player, pivot=grappling_gun_target, color=player.color, swing=grappling_gun_swing)
 
     # check keyboard keys for movement
     keys = pygame.key.get_pressed()
@@ -118,15 +122,14 @@ while not close:
         run = False
 
     if keys[pygame.K_w] and player.can_jump:
-        player.axis_force(force=-8, axis=1)
+        player.apply_axis_vel(vel=-8, axis=1)
     if keys[pygame.K_d]:
-        player.axis_force(force=1, axis=0, limit=5) if run else player.axis_force(force=1, axis=0, limit=3)
+        player.apply_axis_vel(vel=1, axis=0, limit=5) if run else player.apply_axis_vel(vel=1, axis=0, limit=3)
     if keys[pygame.K_a]:
-        player.axis_force(force=-1, axis=0, limit=-5) if run else player.axis_force(force=-1, axis=0, limit=-3)
+        player.apply_axis_vel(vel=-1, axis=0, limit=-5) if run else player.apply_axis_vel(vel=-1, axis=0, limit=-3)
     if keys[pygame.K_r]:
         player.pos = [100, 100]
-        player.perm_force = [0, 0]
-        player.temp_force = [0, 0]
+        player.vel = [0, 0]
 
     # transfer data
     if host_type == 'server':
@@ -148,7 +151,8 @@ while not close:
         gun.angle = math.atan2(mouse_camera_pos[1] - gun.pos[1] + gun.size[1] / 2, mouse_camera_pos[0] - gun.pos[0] + gun.size[0] / 2)  # noqa
     else:
         gun.angle = math.atan2(grappling_gun_target[1] - gun.pos[1] + gun.size[1] / 2, grappling_gun_target[0] - gun.pos[0] + gun.size[0] / 2)  # noqa
-    # player.render_force(display=display, camera=camera, double=True)
+
+    player.render_vel(display=display, camera=camera, double=False)
 
     # display objects
     render_objs = []
@@ -170,8 +174,10 @@ while not close:
 
     # display variables
     variables = {
-        't_force': player.temp_force,
-        'p_force': player.perm_force
+        'rope_angle ': player.rope.angle if player.rope else None,
+        'rope_length': player.rope.length if player.rope else None,
+        'ang_vel    ': player.ang_vel,
+        'ang_acc    ': player.ang_acc
     }
     y = 25
     for name, value in variables.items():
