@@ -4,7 +4,7 @@ import pygame
 
 from OnlineGraph2d.Graphics import generate_shape
 from OnlineGraph2d.Network import Server, Client, get_ip
-from OnlineGraph2d.Physics import GameObject, Camera, Rope, Follower, grappling_gun_check
+from OnlineGraph2d.Physics import Object, GameObject, FollowerObject, Camera, Rope
 
 host_type = input('who are you? [server/client]: ').lower()
 port = 5555
@@ -53,31 +53,62 @@ colors_rgb = [
     (165, 42, 42),  # brown
     (255, 255, 255)  # white
 ]
-grappling_gun_target = None
+grappling_gun = None
 grappling_gun_swing = False
 mouse_pos = None
 
+
+class AimDot(Object):
+    def __init__(self, collision, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mouse_pos, self.grappling_gun = [0, 0], None
+        self.collision = collision
+
+    def update(self):
+        if not self.grappling_gun:
+            best_pos = None
+            min_dist = math.inf
+
+            for map_obj in self.collision:
+                obj_x_edge = (map_obj[0][0], map_obj[0][0] + map_obj[1][0])
+                obj_y_edge = (map_obj[0][1], map_obj[0][1] + map_obj[1][1])
+
+                if obj_x_edge[0] <= self.mouse_pos[0] <= obj_x_edge[1] and obj_y_edge[0] <= self.mouse_pos[1] <= obj_y_edge[1]:  # if the mouse is inside the object keep the mouse position
+                    self.pos = self.mouse_pos
+                    return
+
+                current_x = max(obj_x_edge[0], min(self.mouse_pos[0], obj_x_edge[1]))
+                current_y = max(obj_y_edge[0], min(self.mouse_pos[1], obj_y_edge[1]))
+                current_pos = (current_x, current_y)
+
+                current_dist = (current_pos[0] - self.mouse_pos[0]) ** 2 + (current_pos[1] - self.mouse_pos[1]) ** 2
+
+                if current_dist < min_dist:
+                    min_dist = current_dist
+                    best_pos = current_pos
+
+            self.pos = best_pos
+
+
 game_map = [
-    GameObject(pos=(0, screen_size[1] - 100), angle=0, size=(screen_size[0], 50), shape='rect', color=(255, 255, 255), layer=0, static=True),
-    GameObject(pos=(600, screen_size[1] - 600), angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0, static=True),
-    GameObject(pos=(100, screen_size[1] - 300), angle=0, size=(200, 200), shape='rect', color=(255, 255, 255), layer=0, static=True)
+    GameObject(static=True, pos=[0, screen_size[1] - 100], angle=0, size=(screen_size[0], 50), shape='rect', color=(255, 255, 255), layer=0),
+    GameObject(static=True, pos=[600, screen_size[1] - 600], angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0),
+    GameObject(static=True, pos=[100, screen_size[1] - 300], angle=0, size=(200, 200), shape='rect', color=(255, 255, 255), layer=0)
 ]
 game_map_collision = [(map_obj.pos, map_obj.size) for map_obj in game_map]
 
-player = GameObject(pos=[100, 100], angle=0, size=(30, 30), shape='circle', color=colors_rgb[host.client_number], layer=2, static=False, mass=1, collision=game_map_collision)
+player = GameObject(static=False, pos=[100, 100], angle=0, size=(30, 30), shape='circle', color=colors_rgb[host.client_number], layer=2, mass=1, collision=game_map_collision)
 camera = Camera(obj=player, screen_size=screen_size)
-gun = Follower(obj=player, rel_pos=[player.size[0] - 7, player.size[1] / 2 - 3], angle=0, size=(15, 6), shape='rect', color=(100, 100, 100), layer=5)
+gun = FollowerObject(obj=player, rel_pos=[player.size[0] - 7, player.size[1] / 2 - 3], angle=0, size=(15, 6), shape='rect', color=(100, 100, 100), layer=5)
+aim_dot = AimDot(pos=[100, 100], angle=0, size=(8, 8), shape='circle', color=(255, 0, 0), layer=6, collision=game_map_collision, centered=True)
 
+local_objects = [player, gun, aim_dot]
 if host_type == 'server':
-    local_objects = [player, gun]
     objects = {host.client_number: local_objects}
-else:
-    local_objects = [player, gun]
 
 while not close:
-    # clear display and show fps
+    # clear display
     display.fill((0, 0, 0))
-    display.blit(text_font.render(f'FPS: {clock.get_fps():.1f} / {FPS}', 1, (255, 255, 255)), (screen_size[0] - 170, 25))
 
     # check if the window is closed
     for event in pygame.event.get():
@@ -89,30 +120,30 @@ while not close:
         mouse_camera_pos = (mouse_pos[0] + camera.pos[0], mouse_pos[1] + camera.pos[1])
         if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
-                grappling_gun_target = mouse_camera_pos
+                grappling_gun = True
                 grappling_gun_swing = True
             elif event.button == 3:
-                grappling_gun_target = mouse_camera_pos
+                grappling_gun = True
                 grappling_gun_swing = False
 
     # update mouse position based on the camera movement
     mouse_camera_pos = (mouse_pos[0] + camera.pos[0], mouse_pos[1] + camera.pos[1])
 
+    # update aim_dot mouse position
+    aim_dot.mouse_pos = mouse_camera_pos
+    aim_dot.grappling_gun = grappling_gun
+
     # grappling gun
-    if grappling_gun_target is not None:
-        if not grappling_gun_check(mouse_pos=grappling_gun_target, collision=player.collision):
-            grappling_gun_target = None
+    if grappling_gun is not None:
+        if player.rope and ((not pygame.mouse.get_pressed()[0] and player.rope.swing) or (not pygame.mouse.get_pressed()[2] and not player.rope.swing)):
+            # release grappling gun
+            if not player.rope.swing:
+                player.apply_vel(vel=20, angle=-player.rope.angle - math.pi / 2)
+            grappling_gun = None
             player.rope = None
         else:
-            if player.rope and ((not pygame.mouse.get_pressed()[0] and player.rope.swing) or (not pygame.mouse.get_pressed()[2] and not player.rope.swing)):
-                # release grappling gun
-                if not player.rope.swing:
-                    player.apply_vel(vel=20, angle=-player.rope.angle - math.pi / 2)
-                grappling_gun_target = None
-                player.rope = None
-            else:
-                if not player.rope:
-                    player.rope = Rope(obj=player, pivot=grappling_gun_target, color=player.color, swing=grappling_gun_swing)
+            if not player.rope:
+                player.rope = Rope(obj=player, pivot=aim_dot.pos, swing=grappling_gun_swing, color=player.color)
 
     # check keyboard keys for movement
     keys = pygame.key.get_pressed()
@@ -145,14 +176,18 @@ while not close:
 
     # compute positions
     for game_obj in local_objects:
-        game_obj.update()
+        try:
+            game_obj.update()
+        except AttributeError:
+            pass
+
     camera.update()
     if not player.rope:
         gun.angle = math.atan2(mouse_camera_pos[1] - gun.pos[1] + gun.size[1] / 2, mouse_camera_pos[0] - gun.pos[0] + gun.size[0] / 2)  # noqa
     else:
-        gun.angle = math.atan2(grappling_gun_target[1] - gun.pos[1] + gun.size[1] / 2, grappling_gun_target[0] - gun.pos[0] + gun.size[0] / 2)  # noqa
+        gun.angle = math.atan2(aim_dot.pos[1] - gun.pos[1] + gun.size[1] / 2, aim_dot.pos[0] - gun.pos[0] + gun.size[0] / 2)  # noqa
 
-    player.render_vel(display=display, camera=camera, double=False)
+    # player.render_vel(display=display, camera=camera, double=False)
 
     # display objects
     render_objs = []
@@ -166,18 +201,15 @@ while not close:
 
     for obj in render_objs:
         try:
-            if obj.rope:
+            if obj.rope and obj.rope.show:
                 obj.rope.blit(display=display, camera=camera)
         except AttributeError:
             pass
-        display.blit(*generate_shape(obj=obj, camera=camera))
+        if obj.show:
+            display.blit(*generate_shape(obj=obj, camera=camera))
 
-    # display variables
+    # display variables and fps
     variables = {
-        'rope_angle ': player.rope.angle if player.rope else None,
-        'rope_length': player.rope.length if player.rope else None,
-        'ang_vel    ': player.ang_vel,
-        'ang_acc    ': player.ang_acc
     }
     y = 25
     for name, value in variables.items():
@@ -187,6 +219,8 @@ while not close:
             display.blit(text_font.render(f'{name}: None', 1, (255, 255, 255)), (25, y))
             print(e)
         y += 25
+
+    display.blit(text_font.render(f'FPS: {clock.get_fps():.1f} / {FPS}', 1, (255, 255, 255)), (screen_size[0] - 170, 25))
 
     # render
     pygame.display.update()

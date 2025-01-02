@@ -12,21 +12,15 @@ class Settings:
     swing_friction: float = 0.002
 
 
-def grappling_gun_check(mouse_pos, collision):
-    for map_obj in collision:
-        obj_x_edge = (map_obj[0][0], map_obj[0][0] + map_obj[1][0])
-        obj_y_edge = (map_obj[0][1], map_obj[0][1] + map_obj[1][1])
-
-        if obj_x_edge[0] <= mouse_pos[0] <= obj_x_edge[1] and obj_y_edge[0] <= mouse_pos[1] <= obj_y_edge[1]:
-            return True
-
-    return False
-
-
-class GameObject:
-    def __init__(self, pos, angle, size, shape, color, layer, static, mass=None, collision=None):
+class Object:
+    def __init__(self, pos, angle, size, shape, color, layer, centered=False, show=True):
         self.pos, self.angle, self.size = pos, angle, size
-        self.shape, self.color, self.layer = shape, color, layer
+        self.shape, self.color, self.layer, self.centered, self.show = shape, color, layer, centered, show
+
+
+class GameObject(Object):
+    def __init__(self, static, mass=None, collision=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.static = static
         self.rope = None
 
@@ -152,6 +146,18 @@ class GameObject:
             pygame.draw.line(display, (255, 0, 0), central_pos, (central_pos[0] + self.vel[0] * 10, central_pos[1] + self.vel[1] * 10), width=3)
 
 
+class FollowerObject(Object):
+    def __init__(self, obj, rel_pos, *args, **kwargs):
+        super().__init__(pos=[0, 0], *args, **kwargs)
+        self.obj = obj
+        self.rel_pos = rel_pos  # relative position
+
+        self.update()
+
+    def update(self):
+        self.pos = [self.obj.pos[0] + self.rel_pos[0], self.obj.pos[1] + self.rel_pos[1]]
+
+
 class Camera:
     def __init__(self, obj, screen_size):
         self.obj, self.screen_size = obj, screen_size
@@ -164,24 +170,12 @@ class Camera:
 
 
 class Rope:
-    def __init__(self, obj, pivot, color, swing):
+    def __init__(self, obj, pivot, swing, color, show=True):
         self.obj, self.pivot = obj, pivot
-        self.color = color
         self.swing = swing
+        self.color, self.show = color, show
         self.length = math.sqrt((self.obj.pos[0] + self.obj.size[0] / 2 - self.pivot[0]) ** 2 + (self.obj.pos[1] + self.obj.size[1] / 2 - self.pivot[1]) ** 2)
         self.angle = -math.atan2(self.pivot[1] - (self.obj.pos[1] + self.obj.size[1] / 2), self.pivot[0] - (self.obj.pos[0] + self.obj.size[0] / 2)) - math.pi / 2  # uses pendulum compatible angle system
 
     def blit(self, display, camera):
         pygame.draw.line(display, self.color, (self.obj.pos[0] + self.obj.size[0] / 2 - camera.pos[0], self.obj.pos[1] + self.obj.size[1] / 2 - camera.pos[1]), (self.pivot[0] - camera.pos[0], self.pivot[1] - camera.pos[1]), width=3)
-
-
-class Follower:
-    def __init__(self, obj, rel_pos, angle, size, shape, color, layer):
-        self.obj = obj
-        self.pos, self.rel_pos, self.angle, self.size = [0, 0], rel_pos, angle, size  # absolute and relative positions
-        self.shape, self.color, self.layer = shape, color, layer
-
-        self.update()
-
-    def update(self):
-        self.pos = [self.obj.pos[0] + self.rel_pos[0], self.obj.pos[1] + self.rel_pos[1]]
