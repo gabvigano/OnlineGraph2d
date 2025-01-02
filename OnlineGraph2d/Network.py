@@ -23,14 +23,14 @@ class Server:
     def wait_connection(self):
         connection_number = 0
         self.sock.listen()
-        print('\nSERVER [wait_connection]: waiting for connection')
+        print('\nSERVER: waiting for connection')
 
         while True:
             connection_number += 1
 
             connection, address = self.sock.accept()
 
-            print(f'SERVER [wait_connection]: connected to: {address[0]}')
+            print(f'SERVER: connected to: {address[0]}')
 
             start_new_thread(self.threaded_client, (connection, connection_number))
 
@@ -42,7 +42,7 @@ class Server:
                 data = pickle.loads(connection.recv(1024))
 
                 if not data:
-                    print('SERVER [threaded_client]: disconnected')
+                    print('SERVER: disconnected')
                     del self.to_get[connection_number]
                     break
                 else:
@@ -51,11 +51,11 @@ class Server:
                 connection.sendall(self.to_send)
 
             except Exception as e:
-                print(f'SERVER [threaded_client]: {e}')
+                print(f'SERVER: {e}')
                 del self.to_get[connection_number]
                 break
 
-        print('SERVER [threaded_client]: connection lost')
+        print('SERVER: connection lost')
         connection.close()
 
     def send(self, data):
@@ -70,9 +70,9 @@ class Client:
         try:
             self.sock.connect((server_ip, port))
             self.client_number = pickle.loads(self.sock.recv(1024))
-            print(f'\nCLIENT [__init__]: connection successful (client number: {self.client_number})')
+            print(f'\nCLIENT: connection successful (client number: {self.client_number})')
         except socket.error:
-            print('\nCLIENT [__init__]: connection failed')
+            print('\nCLIENT: connection failed')
 
     def send(self, data):
         self.sock.send(pickle.dumps(data))
