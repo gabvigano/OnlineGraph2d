@@ -102,9 +102,10 @@ camera = Camera(obj=player, screen_size=screen_size)
 gun = FollowerObject(obj=player, rel_pos=[player.size[0] - 7, player.size[1] / 2 - 3], angle=0, size=(15, 6), shape='rect', color=(100, 100, 100), layer=5)
 aim_dot = AimDot(pos=[100, 100], angle=0, size=(8, 8), shape='circle', color=(255, 0, 0), layer=6, collision=game_map_collision, centered=True)
 
-local_objects = [player, gun, aim_dot]
+host_objects = [player, gun]
+local_objects = [aim_dot]
 if host_type == 'server':
-    objects = {host.client_number: local_objects}
+    objects = {host.client_number: host_objects}
 
 while not close:
     # clear display
@@ -134,6 +135,10 @@ while not close:
     aim_dot.grappling_gun = grappling_gun
 
     # grappling gun
+    if player.can_jump and player.rope and player.rope.swing:
+        grappling_gun = None
+        player.rope = None
+
     if grappling_gun is not None:
         if player.rope and ((not pygame.mouse.get_pressed()[0] and player.rope.swing) or (not pygame.mouse.get_pressed()[2] and not player.rope.swing)):
             # release grappling gun
@@ -143,7 +148,7 @@ while not close:
             player.rope = None
         else:
             if not player.rope:
-                player.rope = Rope(obj=player, pivot=aim_dot.pos, swing=grappling_gun_swing, color=player.color)
+                player.rope = Rope(obj=player, pivot=aim_dot.pos, init_vel=player.vel, swing=grappling_gun_swing, color=player.color)
 
     # check keyboard keys for movement
     keys = pygame.key.get_pressed()
@@ -165,17 +170,16 @@ while not close:
     # transfer data
     if host_type == 'server':
         other_data = host.send(objects)
-        objects = {host.client_number: local_objects} | other_data
-        pass
+        objects = {host.client_number: host_objects} | other_data
     else:
-        objects = host.send(local_objects)
-        objects = {host_number: host_objs for host_number, host_objs in objects.items() if host_number != host.client_number}
+        objects = host.send(host_objects)
+        objects = {client_number: host_objs for client_number, host_objs in objects.items() if client_number != host.client_number}
 
     # update player collision
-    player.collision = game_map_collision + [(obj.pos, obj.size) for host_number, host_objs in objects.items() for obj in host_objs if host_number != host.client_number]
+    player.collision = game_map_collision + [(obj.pos, obj.size) for client_number, host_objs in objects.items() for obj in host_objs if client_number != host.client_number]
 
     # compute positions
-    for game_obj in local_objects:
+    for game_obj in host_objects + local_objects:
         try:
             game_obj.update()
         except AttributeError:
@@ -192,10 +196,11 @@ while not close:
     # display objects
     render_objs = []
     render_objs.extend(game_map)
+    render_objs.extend(local_objects)
     if host_type == 'client':
-        render_objs.extend(local_objects)
-    for host_objs in objects.values():
-        render_objs.extend(host_objs)
+        render_objs.extend(host_objects)
+    for client_objs in objects.values():
+        render_objs.extend(client_objs)
 
     render_objs.sort(key=lambda obj: obj.layer)  # sort objects by layer
 
@@ -210,14 +215,23 @@ while not close:
 
     # display variables and fps
     variables = {
+        'acc_x': player.acc[0],
+        'vel_x': player.vel[0],
+        '__separator__': 15,
+        'acc_y': player.acc[1],
+        'vel_y': player.vel[1],
+
     }
     y = 25
     for name, value in variables.items():
-        try:
-            display.blit(text_font.render(f'{name}: {value}', 1, (255, 255, 255)), (25, y))
-        except Exception as e:  # noqa
-            display.blit(text_font.render(f'{name}: None', 1, (255, 255, 255)), (25, y))
-            print(e)
+        if name == '__separator__':
+            display.blit(text_font.render('_' * value, 1, (255, 255, 255)), (25, y))
+        else:
+            try:
+                display.blit(text_font.render(f'{name}: {value}', 1, (255, 255, 255)), (25, y))
+            except Exception as e:  # noqa
+                display.blit(text_font.render(f'{name}: None', 1, (255, 255, 255)), (25, y))
+                print(e)
         y += 25
 
     display.blit(text_font.render(f'FPS: {clock.get_fps():.1f} / {FPS}', 1, (255, 255, 255)), (screen_size[0] - 170, 25))

@@ -43,6 +43,10 @@ class GameObject(Object):
 
             # compute rope
             if self.rope and self.rope.swing and not self.can_jump:
+                if self.rope.init_vel is not None:
+                    self.ang_vel = -(self.rope.init_vel[0] * math.cos(self.rope.angle) + self.rope.init_vel[1] * math.sin(self.rope.angle)) / self.rope.length
+                    self.rope.init_vel = None
+
                 self.rope.angle = (self.rope.angle + math.pi) % (2 * math.pi) - math.pi
 
                 self.ang_acc = (self.acc[0] * math.cos(self.rope.angle) - self.acc[1] * math.sin(self.rope.angle)) / self.rope.length
@@ -170,8 +174,8 @@ class Camera:
 
 
 class Rope:
-    def __init__(self, obj, pivot, swing, color, show=True):
-        self.obj, self.pivot = obj, pivot
+    def __init__(self, obj, pivot, init_vel, swing, color, show=True):
+        self.obj, self.pivot, self.init_vel = obj, pivot, init_vel
         self.swing = swing
         self.color, self.show = color, show
         self.length = math.sqrt((self.obj.pos[0] + self.obj.size[0] / 2 - self.pivot[0]) ** 2 + (self.obj.pos[1] + self.obj.size[1] / 2 - self.pivot[1]) ** 2)
