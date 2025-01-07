@@ -6,10 +6,10 @@ import pygame
 
 @dataclass
 class Settings:
-    gravity: float = 0.1
-    ground_friction: float = 0.2
-    air_friction: float = 0.02
-    swing_friction: float = 0.002
+    gravity: float = 0.2
+    ground_friction: float = 0.15
+    air_friction: float = 0.015
+    swing_friction: float = 0.0015
 
 
 class Object:
@@ -43,11 +43,16 @@ class GameObject(Object):
 
             # compute rope
             if self.rope and self.rope.swing and not self.can_jump:
-                if self.rope.init_vel is not None:
-                    self.ang_vel = -(self.rope.init_vel[0] * math.cos(self.rope.angle) + self.rope.init_vel[1] * math.sin(self.rope.angle)) / self.rope.length
-                    self.rope.init_vel = None
-
                 self.rope.angle = (self.rope.angle + math.pi) % (2 * math.pi) - math.pi
+
+                # pull rope
+                if self.rope.length >= 150:
+                    self.rope.length -= 0.75
+
+                # apply initial velocity
+                if self.rope.init_vel is not None:
+                    self.ang_vel = (self.rope.init_vel[0] * math.cos(self.rope.angle) - self.rope.init_vel[1] * math.sin(self.rope.angle)) / self.rope.length
+                    self.rope.init_vel = None
 
                 self.ang_acc = (self.acc[0] * math.cos(self.rope.angle) - self.acc[1] * math.sin(self.rope.angle)) / self.rope.length
                 self.ang_vel += self.ang_acc
@@ -163,14 +168,17 @@ class FollowerObject(Object):
 
 
 class Camera:
-    def __init__(self, obj, screen_size):
-        self.obj, self.screen_size = obj, screen_size
+    def __init__(self, obj, rel_pos, screen_size):
+        self.obj, self.rel_pos = obj, rel_pos
+        self.screen_size = screen_size
+
         self.pos = [0, 0]
+
         self.update()
 
     def update(self):
-        self.pos[0] = self.obj.pos[0] - self.screen_size[0] / 2
-        self.pos[1] = self.obj.pos[1] - self.screen_size[1] / 2
+        self.pos[0] = self.obj.pos[0] + self.rel_pos[0] - self.screen_size[0] / 2
+        self.pos[1] = self.obj.pos[1] + self.rel_pos[1] - self.screen_size[1] / 2
 
 
 class Rope:
@@ -178,8 +186,9 @@ class Rope:
         self.obj, self.pivot, self.init_vel = obj, pivot, init_vel
         self.swing = swing
         self.color, self.show = color, show
+
         self.length = math.sqrt((self.obj.pos[0] + self.obj.size[0] / 2 - self.pivot[0]) ** 2 + (self.obj.pos[1] + self.obj.size[1] / 2 - self.pivot[1]) ** 2)
         self.angle = -math.atan2(self.pivot[1] - (self.obj.pos[1] + self.obj.size[1] / 2), self.pivot[0] - (self.obj.pos[0] + self.obj.size[0] / 2)) - math.pi / 2  # uses pendulum compatible angle system
 
     def blit(self, display, camera):
-        pygame.draw.line(display, self.color, (self.obj.pos[0] + self.obj.size[0] / 2 - camera.pos[0], self.obj.pos[1] + self.obj.size[1] / 2 - camera.pos[1]), (self.pivot[0] - camera.pos[0], self.pivot[1] - camera.pos[1]), width=3)
+        pygame.draw.line(display, self.color, (self.obj.pos[0] + self.obj.size[0] / 2 - camera.pos[0], self.obj.pos[1] + self.obj.size[1] / 2 - camera.pos[1]), (self.pivot[0] - camera.pos[0], self.pivot[1] - camera.pos[1]), width=2)

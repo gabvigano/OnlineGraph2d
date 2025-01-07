@@ -91,16 +91,16 @@ class AimDot(Object):
 
 
 game_map = [
-    GameObject(static=True, pos=[0, screen_size[1] - 100], angle=0, size=(screen_size[0], 50), shape='rect', color=(255, 255, 255), layer=0),
-    GameObject(static=True, pos=[600, screen_size[1] - 600], angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0),
-    GameObject(static=True, pos=[100, screen_size[1] - 300], angle=0, size=(200, 200), shape='rect', color=(255, 255, 255), layer=0)
+    GameObject(static=True, pos=[0, 500], angle=0, size=(300, 50), shape='rect', color=(255, 255, 255), layer=0),
+    GameObject(static=True, pos=[450, 0], angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0),
+    GameObject(static=True, pos=[650, 500], angle=0, size=(300, 50), shape='rect', color=(255, 255, 255), layer=0)
 ]
 game_map_collision = [(map_obj.pos, map_obj.size) for map_obj in game_map]
 
-player = GameObject(static=False, pos=[100, 100], angle=0, size=(30, 30), shape='circle', color=colors_rgb[host.client_number], layer=2, mass=1, collision=game_map_collision)
-camera = Camera(obj=player, screen_size=screen_size)
-gun = FollowerObject(obj=player, rel_pos=[player.size[0] - 7, player.size[1] / 2 - 3], angle=0, size=(15, 6), shape='rect', color=(100, 100, 100), layer=5)
-aim_dot = AimDot(pos=[100, 100], angle=0, size=(8, 8), shape='circle', color=(255, 0, 0), layer=6, collision=game_map_collision, centered=True)
+player = GameObject(static=False, pos=[100, 100], angle=0, size=(20, 20), shape='circle', color=colors_rgb[host.client_number], layer=2, mass=1, collision=game_map_collision)
+camera = Camera(obj=player, rel_pos=[0, -100], screen_size=screen_size)
+gun = FollowerObject(obj=player, rel_pos=[player.size[0] - 5, player.size[1] / 2 - 2], angle=0, size=(10, 4), shape='rect', color=(100, 100, 100), layer=5)
+aim_dot = AimDot(pos=[100, 100], angle=0, size=(7, 7), shape='circle', color=(255, 0, 0), layer=6, collision=game_map_collision, centered=True)
 
 host_objects = [player, gun]
 local_objects = [aim_dot]
@@ -143,7 +143,7 @@ while not close:
         if player.rope and ((not pygame.mouse.get_pressed()[0] and player.rope.swing) or (not pygame.mouse.get_pressed()[2] and not player.rope.swing)):
             # release grappling gun
             if not player.rope.swing:
-                player.apply_vel(vel=20, angle=-player.rope.angle - math.pi / 2)
+                player.apply_vel(vel=30, angle=-player.rope.angle - math.pi / 2)
             grappling_gun = None
             player.rope = None
         else:
@@ -158,11 +158,11 @@ while not close:
         run = False
 
     if keys[pygame.K_w] and player.can_jump:
-        player.apply_axis_vel(vel=-8, axis=1)
+        player.apply_axis_vel(vel=-12, axis=1)
     if keys[pygame.K_d]:
-        player.apply_axis_vel(vel=1, axis=0, limit=5) if run else player.apply_axis_vel(vel=1, axis=0, limit=3)
+        player.apply_axis_vel(vel=1, axis=0, limit=10) if run else player.apply_axis_vel(vel=1, axis=0, limit=5)
     if keys[pygame.K_a]:
-        player.apply_axis_vel(vel=-1, axis=0, limit=-5) if run else player.apply_axis_vel(vel=-1, axis=0, limit=-3)
+        player.apply_axis_vel(vel=-1, axis=0, limit=-10) if run else player.apply_axis_vel(vel=-1, axis=0, limit=-5)
     if keys[pygame.K_r]:
         player.pos = [100, 100]
         player.vel = [0, 0]
@@ -215,16 +215,19 @@ while not close:
 
     # display variables and fps
     variables = {
-        'acc_x': player.acc[0],
         'vel_x': player.vel[0],
-        '__separator__': 15,
-        'acc_y': player.acc[1],
         'vel_y': player.vel[1],
+        '__separator__': 15,
+        'acc_x': player.acc[0],
+        'acc_y': player.acc[1],
+        '__separator__1': 15,
+        'ang_acc': player.ang_acc,
+        'ang_vel': player.ang_vel
 
     }
     y = 25
     for name, value in variables.items():
-        if name == '__separator__':
+        if '__separator__' in name:
             display.blit(text_font.render('_' * value, 1, (255, 255, 255)), (25, y))
         else:
             try:
