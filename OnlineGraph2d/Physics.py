@@ -10,6 +10,7 @@ class Settings:
     ground_friction: float = 0.15
     air_friction: float = 0.015
     swing_friction: float = 0.0015
+    rope_animation_speed: int = 40
 
 
 class Object:
@@ -42,7 +43,7 @@ class GameObject(Object):
             self.vel[1] += self.acc[1]
 
             # compute rope
-            if self.rope and self.rope.swing and not self.can_jump:
+            if self.rope and self.rope.swing and self.rope.ready and not self.can_jump:
                 self.rope.angle = (self.rope.angle + math.pi) % (2 * math.pi) - math.pi
 
                 # pull rope
@@ -57,24 +58,12 @@ class GameObject(Object):
                 self.ang_acc = (self.acc[0] * math.cos(self.rope.angle) - self.acc[1] * math.sin(self.rope.angle)) / self.rope.length
                 self.ang_vel += self.ang_acc
                 self.ang_vel *= (1 - Settings.swing_friction)
-                self.rope.angle += self.ang_vel
 
                 self.vel[0] = self.rope.pivot[0] + self.rope.length * math.sin(self.rope.angle) - self.pos[0]
                 self.vel[1] = self.rope.pivot[1] + self.rope.length * math.cos(self.rope.angle) - self.pos[1]
             else:
                 self.ang_vel = 0
                 self.ang_acc = 0
-
-            # set maximum velocity
-            if self.vel[0] >= 0:
-                self.vel[0] = min(self.vel[0], 10)
-            else:
-                self.vel[0] = max(self.vel[0], -10)
-
-            if self.vel[1] >= 0:
-                self.vel[1] = min(self.vel[1], 10)
-            else:
-                self.vel[1] = max(self.vel[1], -10)
 
             # friction
             if not (self.rope and self.rope.swing and not self.can_jump):
@@ -115,6 +104,8 @@ class GameObject(Object):
 
             self.pos[0] += self.vel[0]
             self.pos[1] += self.vel[1]
+            if self.rope and self.rope.swing and self.rope.ready and not self.can_jump:
+                self.rope.angle += self.ang_vel  # update angle only if also the position is updated
         else:
             raise Exception("'update' function was called but object is static")
 
@@ -187,8 +178,29 @@ class Rope:
         self.swing = swing
         self.color, self.show = color, show
 
+        self.ready, self.animation_steps, self.animation_pos = False, 0, [0, 0]
+        self.length, self.angle = None, None
+
+        self.update()
+        self.update_animation()
+
+    def update(self):
         self.length = math.sqrt((self.obj.pos[0] + self.obj.size[0] / 2 - self.pivot[0]) ** 2 + (self.obj.pos[1] + self.obj.size[1] / 2 - self.pivot[1]) ** 2)
         self.angle = -math.atan2(self.pivot[1] - (self.obj.pos[1] + self.obj.size[1] / 2), self.pivot[0] - (self.obj.pos[0] + self.obj.size[0] / 2)) - math.pi / 2  # uses pendulum compatible angle system
 
+    def update_animation(self):
+        self.animation_pos[0] = self.obj.pos[0] + self.obj.size[0] / 2 - Settings.rope_animation_speed * self.animation_steps * math.sin(self.angle)
+        self.animation_pos[1] = self.obj.pos[1] + self.obj.size[1] / 2 - Settings.rope_animation_speed * self.animation_steps * math.cos(self.angle)
+        self.animation_steps += 1
+
     def blit(self, display, camera):
-        pygame.draw.line(display, self.color, (self.obj.pos[0] + self.obj.size[0] / 2 - camera.pos[0], self.obj.pos[1] + self.obj.size[1] / 2 - camera.pos[1]), (self.pivot[0] - camera.pos[0], self.pivot[1] - camera.pos[1]), width=2)
+        if not self.ready:
+            self.ready = abs(self.pivot[0] - self.animation_pos[0]) <= abs(Settings.rope_animation_speed * math.sin(self.angle))
+
+        if not self.ready:
+            self.update()
+            self.update_animation()
+
+            pygame.draw.line(display, self.color, (self.obj.pos[0] + self.obj.size[0] / 2 - camera.pos[0], self.obj.pos[1] + self.obj.size[1] / 2 - camera.pos[1]), (self.animation_pos[0] - camera.pos[0], self.animation_pos[1] - camera.pos[1]), width=2)
+        else:
+            pygame.draw.line(display, self.color, (self.obj.pos[0] + self.obj.size[0] / 2 - camera.pos[0], self.obj.pos[1] + self.obj.size[1] / 2 - camera.pos[1]), (self.pivot[0] - camera.pos[0], self.pivot[1] - camera.pos[1]), width=2)

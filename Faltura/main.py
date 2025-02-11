@@ -51,21 +51,34 @@ colors_rgb = [
     (255, 100, 0),  # orange
     (128, 0, 128),  # purple
     (165, 42, 42),  # brown
-    (255, 255, 255)  # white
 ]
+variables = {}
+connection_number = 0
+weapons = ['grappling_gun', 'gun']
+weapon = 0
+mouse_pos = None
 grappling_gun = None
 grappling_gun_swing = False
-mouse_pos = None
 
 
 class AimDot(Object):
     def __init__(self, collision, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.mouse_pos, self.grappling_gun = [0, 0], None
         self.collision = collision
 
+        self.mouse_pos = [0, 0]
+        self.weapon = None
+
+        self.grappling_gun = None
+        self.bullets = []
+
     def update(self):
-        if not self.grappling_gun:
+        if weapon == 0:
+            self.show = True
+        else:
+            self.show = False
+
+        if not self.grappling_gun and weapon == 0:
             best_pos = None
             min_dist = math.inf
 
@@ -89,11 +102,19 @@ class AimDot(Object):
 
             self.pos = best_pos
 
+        # delete far bullets
+        self.bullets = [bullet for bullet in self.bullets if abs(bullet.pos[0]) < 3000 and abs(bullet.pos[1]) < 2000]
+
+        # delete old bullets if there are too much
+        max_bullets = math.floor(22 / connection_number)  # here 22 is the number of bullets the current buffer size of Network.py supports; in the future, if optimization is implemented, update this number
+        self.bullets = self.bullets[-max_bullets:]
+
 
 game_map = [
     GameObject(static=True, pos=[0, 500], angle=0, size=(300, 50), shape='rect', color=(255, 255, 255), layer=0),
     GameObject(static=True, pos=[450, 0], angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0),
-    GameObject(static=True, pos=[650, 500], angle=0, size=(300, 50), shape='rect', color=(255, 255, 255), layer=0)
+    GameObject(static=True, pos=[650, 500], angle=0, size=(300, 50), shape='rect', color=(255, 255, 255), layer=0),
+    GameObject(static=True, pos=[0, 450], angle=0, size=(50, 50), shape='rect', color=(255, 255, 255), layer=0)
 ]
 game_map_collision = [(map_obj.pos, map_obj.size) for map_obj in game_map]
 
@@ -102,55 +123,39 @@ camera = Camera(obj=player, rel_pos=[0, -100], screen_size=screen_size)
 gun = FollowerObject(obj=player, rel_pos=[player.size[0] - 5, player.size[1] / 2 - 2], angle=0, size=(10, 4), shape='rect', color=(100, 100, 100), layer=5)
 aim_dot = AimDot(pos=[100, 100], angle=0, size=(7, 7), shape='circle', color=(255, 0, 0), layer=6, collision=game_map_collision, centered=True)
 
-host_objects = [player, gun]
+global_objects = [player, gun]
 local_objects = [aim_dot]
 if host_type == 'server':
-    objects = {host.client_number: host_objects}
+    objects = {host.client_number: global_objects}  # initialize server's objects to have data to share at the first frame
 
 while not close:
     # clear display
     display.fill((0, 0, 0))
 
-    # check if the window is closed
+    # mouse input
     for event in pygame.event.get():
+        # check if the window is closed
         if event.type == pygame.QUIT:
             close = True
 
-        # check if the mouse button is pressed for the grappling gun
         mouse_pos = pygame.mouse.get_pos()
-        mouse_camera_pos = (mouse_pos[0] + camera.pos[0], mouse_pos[1] + camera.pos[1])
+
+        if event.type == pygame.MOUSEWHEEL:
+            weapon += event.y
+
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:
-                grappling_gun = True
-                grappling_gun_swing = True
-            elif event.button == 3:
-                grappling_gun = True
-                grappling_gun_swing = False
+            if weapon == 0:
+                if event.button == 1:
+                    grappling_gun = True
+                    grappling_gun_swing = True
+                elif event.button == 3:
+                    grappling_gun = True
+                    grappling_gun_swing = False
+            elif weapon == 1 and event.button == 1:
+                aim_dot.bullets.append(GameObject(static=False, pos=gun.pos, angle=0, size=(5, 5), shape='circle', color=(255, 255, 255), layer=10, mass=0.1, collision=game_map_collision))
+                aim_dot.bullets[-1].apply_vel(vel=25, angle=gun.angle)
 
-    # update mouse position based on the camera movement
-    mouse_camera_pos = (mouse_pos[0] + camera.pos[0], mouse_pos[1] + camera.pos[1])
-
-    # update aim_dot mouse position
-    aim_dot.mouse_pos = mouse_camera_pos
-    aim_dot.grappling_gun = grappling_gun
-
-    # grappling gun
-    if player.can_jump and player.rope and player.rope.swing:
-        grappling_gun = None
-        player.rope = None
-
-    if grappling_gun is not None:
-        if player.rope and ((not pygame.mouse.get_pressed()[0] and player.rope.swing) or (not pygame.mouse.get_pressed()[2] and not player.rope.swing)):
-            # release grappling gun
-            if not player.rope.swing:
-                player.apply_vel(vel=30, angle=-player.rope.angle - math.pi / 2)
-            grappling_gun = None
-            player.rope = None
-        else:
-            if not player.rope:
-                player.rope = Rope(obj=player, pivot=aim_dot.pos, init_vel=player.vel, swing=grappling_gun_swing, color=player.color)
-
-    # check keyboard keys for movement
+    # keyboard input
     keys = pygame.key.get_pressed()
     if keys[pygame.K_LSHIFT]:
         run = True
@@ -166,26 +171,60 @@ while not close:
     if keys[pygame.K_r]:
         player.pos = [100, 100]
         player.vel = [0, 0]
+        aim_dot.bullets = []
+
+    # normalize weapon
+    weapon %= len(weapons)
+
+    # update mouse position based on the camera movement
+    mouse_camera_pos = (mouse_pos[0] + camera.pos[0], mouse_pos[1] + camera.pos[1])
+
+    # update aim_dot mouse position, weapon and grappling gun
+    aim_dot.mouse_pos = mouse_camera_pos
+    aim_dot.weapon = weapon
+    aim_dot.grappling_gun = grappling_gun
+
+    # grappling gun
+    if grappling_gun is not None:
+        if player.rope and ((not pygame.mouse.get_pressed()[0] and player.rope.swing) or (not pygame.mouse.get_pressed()[2] and not player.rope.swing)):
+            # release grappling gun
+            if not player.rope.swing and player.rope.ready:
+                player.apply_vel(vel=20, angle=-player.rope.angle - math.pi / 2)
+            grappling_gun = None
+            player.rope = None
+        else:
+            if not player.rope:
+                # create grappling gun
+                player.rope = Rope(obj=player, pivot=aim_dot.pos, init_vel=player.vel, swing=grappling_gun_swing, color=player.color)
+
+    if player.can_jump and player.rope and player.rope.swing:
+        grappling_gun = None
+        player.rope = None
 
     # transfer data
     if host_type == 'server':
         other_data = host.send(objects)
-        objects = {host.client_number: host_objects} | other_data
+        objects = {host.client_number: global_objects + aim_dot.bullets} | other_data  # update server's objects
+        connection_number = len(list(objects.keys()))
     else:
-        objects = host.send(host_objects)
+        objects = host.send(global_objects + aim_dot.bullets)
         objects = {client_number: host_objs for client_number, host_objs in objects.items() if client_number != host.client_number}
+        connection_number = len(list(objects.keys())) + 1  # + 1 because clients exclude their own content (see the above line)
 
-    # update player collision
-    player.collision = game_map_collision + [(obj.pos, obj.size) for client_number, host_objs in objects.items() for obj in host_objs if client_number != host.client_number]
+    # update objects collision
+    player.collision = game_map_collision + [(obj.pos, obj.size) for client_number, host_objs in objects.items() for obj in host_objs if obj is not player]
+    for bullet in aim_dot.bullets:
+        bullet.collision = game_map_collision + [(obj.pos, obj.size) for client_number, host_objs in objects.items() for obj in host_objs if obj is not bullet]
 
     # compute positions
-    for game_obj in host_objects + local_objects:
+    for game_obj in global_objects + local_objects + aim_dot.bullets:
         try:
             game_obj.update()
         except AttributeError:
             pass
 
     camera.update()
+
     if not player.rope:
         gun.angle = math.atan2(mouse_camera_pos[1] - gun.pos[1] + gun.size[1] / 2, mouse_camera_pos[0] - gun.pos[0] + gun.size[0] / 2)  # noqa
     else:
@@ -198,7 +237,7 @@ while not close:
     render_objs.extend(game_map)
     render_objs.extend(local_objects)
     if host_type == 'client':
-        render_objs.extend(host_objects)
+        render_objs.extend(global_objects + aim_dot.bullets)
     for client_objs in objects.values():
         render_objs.extend(client_objs)
 
@@ -214,21 +253,18 @@ while not close:
             display.blit(*generate_shape(obj=obj, camera=camera))
 
     # display variables and fps
-    variables = {
-        'vel_x': player.vel[0],
-        'vel_y': player.vel[1],
-        '__separator__': 15,
-        'acc_x': player.acc[0],
-        'acc_y': player.acc[1],
-        '__separator__1': 15,
-        'ang_acc': player.ang_acc,
-        'ang_vel': player.ang_vel
+    try:
+        variables = {
+            'weapon': weapons[weapon],
+            'bullets': len(aim_dot.bullets)
+        }
+    except IndexError:
+        pass
 
-    }
     y = 25
     for name, value in variables.items():
         if '__separator__' in name:
-            display.blit(text_font.render('_' * value, 1, (255, 255, 255)), (25, y))
+            display.blit(text_font.render('_' * value, 1, (255, 255, 255)), (25, y))  # noqa
         else:
             try:
                 display.blit(text_font.render(f'{name}: {value}', 1, (255, 255, 255)), (25, y))

@@ -2,6 +2,8 @@ import pickle
 import socket
 from _thread import start_new_thread
 
+buffer_size = 1024 * 8
+
 
 def get_ip():
     try:
@@ -39,7 +41,7 @@ class Server:
 
         while True:
             try:
-                data = pickle.loads(connection.recv(1024))
+                data = pickle.loads(connection.recv(buffer_size))
 
                 if not data:
                     print('SERVER: disconnected')
@@ -69,11 +71,11 @@ class Client:
 
         try:
             self.sock.connect((server_ip, port))
-            self.client_number = pickle.loads(self.sock.recv(1024))
+            self.client_number = pickle.loads(self.sock.recv(buffer_size))
             print(f'\nCLIENT: connection successful (client number: {self.client_number})')
         except socket.error:
             print('\nCLIENT: connection failed')
 
     def send(self, data):
         self.sock.send(pickle.dumps(data))
-        return pickle.loads(self.sock.recv(1024))
+        return pickle.loads(self.sock.recv(buffer_size))
